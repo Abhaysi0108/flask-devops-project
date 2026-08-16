@@ -1,29 +1,42 @@
 pipeline {
     agent any
 
-    stages {
+    environment {
+        DOCKER_IMAGE = "abhaysingh07/flask-app:v1"
+    }
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+    stages {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t flask-app:v1 .'
+                sh 'docker build -t $DOCKER_IMAGE .'
             }
         }
 
-        stage('Remove Old Container') {
+        stage('Docker Login') {
             steps {
-                sh 'docker rm -f flask-container || true'
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                }
             }
         }
 
-        stage('Run Container') {
+        stage('Push Image') {
             steps {
-                sh 'docker run -d --name flask-container -p 5000:5000 flask-app:v1'
+                sh 'docker push $DOCKER_IMAGE'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh '''
+                docker rm -f flask-container || true
+                docker run -d --name flask-container -p 5000:5000 $DOCKER_IMAGE
+                '''
             }
         }
     }
